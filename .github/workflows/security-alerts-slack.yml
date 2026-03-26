@@ -1,0 +1,124 @@
+name: "Security Alert to Slack"
+
+on:
+  code_scanning_alert:
+    types: [appeared_in_branch, created, reopened]
+  dependabot_alert:
+    types: [created, reopened]
+  secret_scanning_alert:
+    types: [created, reopened]
+
+permissions:
+  security-events: read
+  contents: read
+
+jobs:
+  notify-slack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send security alert to Slack
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL_GH_SEC_ALERTS }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_JSON: ${{ toJSON(github.event) }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK" ]; then
+            echo "SLACK_WEBHOOK_URL_GH_SEC_ALERTS secret not set, skipping"
+            exit 0
+          fi
+
+          REPO_URL="https://github.com/${REPO_NAME}"
+
+          case "$EVENT_NAME" in
+            code_scanning_alert)
+              ALERT_URL=$(echo "$EVENT_JSON" | jq -r '.alert.html_url // ""')
+              SEVERITY=$(echo "$EVENT_JSON" | jq -r '.alert.rule.security_severity_level // "unknown"')
+              DESCRIPTION=$(echo "$EVENT_JSON" | jq -r '.alert.rule.description // "N/A"')
+              TOOL=$(echo "$EVENT_JSON" | jq -r '.alert.tool.name // "N/A"')
+              FILE=$(echo "$EVENT_JSON" | jq -r '.alert.most_recent_instance.location.path // "N/A"')
+              LINE=$(echo "$EVENT_JSON" | jq -r '.alert.most_recent_instance.location.start_line // "0"')
+              TYPE="Code Scanning"
+              EMOJI="🔍"
+              DETAIL="*Tool:* ${TOOL}\n*File:* \`${FILE}:${LINE}\`\n*Rule:* ${DESCRIPTION}"
+              ;;
+            dependabot_alert)
+              ALERT_URL=$(echo "$EVENT_JSON" | jq -r '.alert.html_url // ""')
+              SEVERITY=$(echo "$EVENT_JSON" | jq -r '.alert.security_vulnerability.severity // "unknown"')
+              DESCRIPTION=$(echo "$EVENT_JSON" | jq -r '.alert.security_advisory.summary // "N/A"')
+              PACKAGE=$(echo "$EVENT_JSON" | jq -r '.alert.security_vulnerability.package.name // "N/A"')
+              ECOSYSTEM=$(echo "$EVENT_JSON" | jq -r '.alert.security_vulnerability.package.ecosystem // "N/A"')
+              CVE=$(echo "$EVENT_JSON" | jq -r '.alert.security_advisory.cve_id // "N/A"')
+              TYPE="Dependabot"
+              EMOJI="📦"
+              DETAIL="*Package:* ${PACKAGE} (${ECOSYSTEM})\n*CVE:* ${CVE}\n*Summary:* ${DESCRIPTION}"
+              ;;
+            secret_scanning_alert)
+              ALERT_URL=$(echo "$EVENT_JSON" | jq -r '.alert.html_url // ""')
+              SEVERITY="critical"
+              SECRET_TYPE=$(echo "$EVENT_JSON" | jq -r '.alert.secret_type_display_name // "Unknown"')
+              PUSHED_BY=$(echo "$EVENT_JSON" | jq -r '.alert.push_protection_bypassed_by.login // "N/A"')
+              TYPE="Secret Scanning"
+              EMOJI="🔑"
+              DETAIL="*Secret type:* ${SECRET_TYPE}\n*Pushed by:* ${PUSHED_BY}"
+              ;;
+            *)
+              echo "Unknown event: $EVENT_NAME"
+              exit 0
+              ;;
+          esac
+
+          SEVERITY_UPPER=$(echo "$SEVERITY" | tr '[:lower:]' '[:upper:]')
+          case "$SEVERITY" in
+            critical) SEV_EMOJI="🔴" ;;
+            high)     SEV_EMOJI="🟠" ;;
+            medium)   SEV_EMOJI="🟡" ;;
+            low)      SEV_EMOJI="🟢" ;;
+            *)        SEV_EMOJI="⚪" ;;
+          esac
+
+          jq -n \
+            --arg emoji "$EMOJI" \
+            --arg type "$TYPE" \
+            --arg sev_emoji "$SEV_EMOJI" \
+            --arg severity "$SEVERITY_UPPER" \
+            --arg repo "$REPO_NAME" \
+            --arg repo_url "$REPO_URL" \
+            --arg detail "$DETAIL" \
+            --arg alert_url "$ALERT_URL" \
+            '{
+              blocks: [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: ($emoji + " " + $type + " Alert \u2014 " + $sev_emoji + " " + $severity), emoji: true }
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: ("*Repo:* <" + $repo_url + "|" + $repo + ">\n" + $detail) }
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "Ver Alerta" },
+                      url: $alert_url,
+                      style: "danger"
+                    }
+                  ]
+                },
+                { type: "divider" }
+              ]
+            }' > /tmp/slack_payload.json
+
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H 'Content-type: application/json' \
+            --data @/tmp/slack_payload.json "$SLACK_WEBHOOK")
+
+          if [ "$RESPONSE" = "200" ]; then
+            echo "Notification sent to Slack"
+          else
+            echo "Error sending to Slack (HTTP $RESPONSE)"
+            cat /tmp/slack_payload.json
+            exit 1
+          fi
