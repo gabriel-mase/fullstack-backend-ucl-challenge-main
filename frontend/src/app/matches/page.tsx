@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, Suspense } from 'react';
@@ -169,8 +170,8 @@ function MatchesContent() {
               </colgroup>
               <tbody>
                 {matchesByDay.map(([day, dayMatches]) => (
-                  <>
-                    <tr key={`day-${day}`} className="bg-slate-50 border-y border-slate-200">
+                  <React.Fragment key={`day-${day}`}>
+                    <tr className="bg-slate-50 border-y border-slate-200">
                       <td colSpan={3} className="px-4 py-2">
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                           Match Day {day}
@@ -185,7 +186,7 @@ function MatchesContent() {
                     {dayMatches.map(match => (
                       <MatchRow key={match.id} match={match} highlightTeamId={teamId} />
                     ))}
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
