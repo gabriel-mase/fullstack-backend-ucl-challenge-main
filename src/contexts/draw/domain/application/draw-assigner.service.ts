@@ -52,12 +52,13 @@ export class DrawService {
     potAssignments: Map<number, number>,
     drawId: number
   ): Match[] {
+    const shuffledTeams = shuffle([...teams]);
     const states = new Map<number, TeamState>();
     const matches: Match[] = [];
     let matchId = 1;
 
     // Initialize team states
-    for (const team of teams) {
+    for (const team of shuffledTeams) {
       states.set(team.id, {
         opponents: new Set(),
         matches: 0,
@@ -71,7 +72,7 @@ export class DrawService {
     // Generate matches day by day
     for (let matchDay = 1; matchDay <= MATCH_DAYS; matchDay++) {
       // Get teams that haven't played this match day yet
-      const availableTeams = teams.filter(team => !states.get(team.id)!.matchDays.has(matchDay));
+      const availableTeams = shuffledTeams.filter(team => !states.get(team.id)!.matchDays.has(matchDay));
 
       const paired = new Set<number>();
 
@@ -211,4 +212,12 @@ export class DrawService {
 
     return matches;
   }
+}
+
+function shuffle<T>(array: T[]): T[] {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
 }
