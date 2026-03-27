@@ -10,7 +10,7 @@
     "dev:all": "concurrently -n backend,frontend -c blue,green \"npm run dev\" \"npm --prefix frontend run dev -- -p 3001\"",
     "prestart": "npm install && npm run build",
     "pretest": "npm install && prisma generate && npm run build",
-    "test": "cross-env PORT=8001 NODE_OPTIONS='--import tsx' mocha --reporter mocha-multi-reporters --reporter-options configFile=config.json",
+    "test": "cross-env PORT=8001 node --import tsx node_modules/mocha/bin/mocha.js --reporter mocha-multi-reporters --reporter-options configFile=config.json",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:unit:ui": "vitest --ui",
