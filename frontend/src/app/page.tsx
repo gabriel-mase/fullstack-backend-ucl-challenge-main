@@ -14,12 +14,18 @@ export default function HomePage() {
 
   const createMutation = useMutation({
     mutationFn: api.createDraw,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['draw'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['draw'] });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: api.deleteDraw,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['draw'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['draw'] });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
   });
 
   const isBusy = createMutation.isPending || deleteMutation.isPending;
